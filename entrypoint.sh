@@ -167,7 +167,7 @@ fi
 if [[ $COMMAND == 'plan' ]]; then
   # Look for an existing plan PR comment and delete
   echo -e "\033[34;1mINFO:\033[0m Looking for an existing plan PR comment."
-  PR_COMMENT_ID=$(curl -sS -H "$AUTH_HEADER" -H "$ACCEPT_HEADER" -L "$PR_COMMENTS_URL" | jq '.[] | select(.body|test ("### Terraform `plan` .* for Workspace: `'"$WORKSPACE"'`")) | .id')
+  PR_COMMENT_ID=$(curl -sS -H "$AUTH_HEADER" -H "$ACCEPT_HEADER" -L "$PR_COMMENTS_URL" | jq '.[] | select(.body|test ("### Terraform `plan` .* for Stage: `'"$TF_PWD"'`")) | .id')
   if [ "$PR_COMMENT_ID" ]; then
     echo -e "\033[34;1mINFO:\033[0m Found existing plan PR comment: $PR_COMMENT_ID. Deleting."
     PR_COMMENT_URL="$PR_COMMENT_URI/$PR_COMMENT_ID"
@@ -182,9 +182,12 @@ if [[ $COMMAND == 'plan' ]]; then
   if [[ $EXIT_CODE -eq 0 || $EXIT_CODE -eq 2 ]]; then
     CLEAN_PLAN=$(echo "$INPUT" | sed -nr '/-{72}/,/-{72}/{ /-{72}/d; p }') # Strip refresh section
     CLEAN_PLAN=${CLEAN_PLAN::65300} # GitHub has a 65535-char comment limit - truncate plan, leaving space for comment wrapper
-    CLEAN_PLAN=$(echo "$CLEAN_PLAN" | sed -E 's/^([[:blank:]]*)([-+~])/\2\1/g') # Move any diff characters to start of line
-    PR_COMMENT="### Terraform \`plan\` Succeeded for Workspace: \`$WORKSPACE\`
-<details$DETAILS_STATE><summary>Show Output</summary>
+    CLEAN_PLAN=$(echo "$CLEAN_PLAN" | sed -E 's/^([[:blank:]]*)([-+~])([[:blank:]])/\2\1\3/') # Move any diff characters to start of line
+    CLEAN_PLAN=$(echo "$CLEAN_PLAN" | sed -E 's/^~([[:blank:]])/!\1/') # Replace ~ with ! to colorize the diff in github comments
+    SUMMARY="No changes."
+    [[ $EXIT_CODE -eq 2 ]] && SUMMARY="Show ${CLEAN_PLAN##*$'\n'}"
+    PR_COMMENT="### Terraform \`plan\` Succeeded for Stage: \`$TF_PWD\`
+<details$DETAILS_STATE><summary>${SUMMARY}</summary>
 
 \`\`\`diff
 $CLEAN_PLAN
